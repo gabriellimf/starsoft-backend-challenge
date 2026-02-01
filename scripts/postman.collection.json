@@ -1,0 +1,178 @@
+{
+  "info": {
+    "name": "Cinema API",
+    "_postman_id": "b2f9b7b6-3dd8-4f3a-9e52-collection-cinema",
+    "description": "Postman collection to test the Cinema API (sessions, reservations, users, metrics). Start stack with docker compose up, baseUrl defaults to http://localhost:3000.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Docs",
+      "item": [
+        {
+          "name": "Swagger Docs",
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/api-docs", "host": ["{{baseUrl}}"], "path": ["api-docs"]}},
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"]}},
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "item": [
+        {
+          "name": "Create Session",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {"exec": [
+                "// Generate idempotency key if not set",
+                "if (!pm.variables.get('idempotencyKey')) { pm.variables.set('idempotencyKey', crypto.randomUUID()); }"
+              ], "type": "text/javascript"}
+            },
+            {
+              "listen": "test",
+              "script": {"exec": [
+                "const json = pm.response.json();",
+                "pm.collectionVariables.set('sessionId', json.id);",
+                "pm.test('Session created has id', function () { pm.expect(json.id).to.exist; });"
+              ], "type": "text/javascript"}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Idempotency-Key", "value": "{{idempotencyKey}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"movieTitle\": \"The Matrix\",\n  \"startTime\": \"{{nowIso}}\",\n  \"room\": \"Room 1\",\n  \"price\": 25.0,\n  \"seatsCount\": 12\n}"},
+            "url": {"raw": "{{baseUrl}}/sessions", "host": ["{{baseUrl}}"], "path": ["sessions"]}
+          },
+          "response": []
+        },
+        {
+          "name": "Get Availability",
+          "event": [
+            {
+              "listen": "test",
+              "script": {"exec": [
+                "const json = pm.response.json();",
+                "pm.test('Availability includes items', function () { pm.expect(json.items).to.be.an('array'); });"
+              ], "type": "text/javascript"}
+            }
+          ],
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/sessions/{{sessionId}}/availability", "host": ["{{baseUrl}}"], "path": ["sessions", "{{sessionId}}", "availability"]}},
+          "response": []
+        },
+        {
+          "name": "Pick 2 AVAILABLE seats (set seatIds)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {"exec": [
+                "const json = pm.response.json();",
+                "const available = (json.items || []).filter(i => i.status === 'AVAILABLE').slice(0,2);",
+                "pm.collectionVariables.set('seatIds', JSON.stringify(available.map(a => a.seatId)));",
+                "pm.test('Stored seatIds', function () { pm.expect(available.length).to.be.above(0); });"
+              ], "type": "text/javascript"}
+            }
+          ],
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/sessions/{{sessionId}}/availability", "host": ["{{baseUrl}}"], "path": ["sessions", "{{sessionId}}", "availability"]}},
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reservations",
+      "item": [
+        {
+          "name": "Create Reservation",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {"exec": [
+                "if (!pm.variables.get('idempotencyKey')) { pm.variables.set('idempotencyKey', crypto.randomUUID()); }"
+              ], "type": "text/javascript"}
+            },
+            {
+              "listen": "test",
+              "script": {"exec": [
+                "const json = pm.response.json();",
+                "pm.collectionVariables.set('reservationIds', JSON.stringify(json.reservationIds || []));",
+                "pm.test('Reservation created', function () { pm.expect(json.reservationIds).to.be.an('array'); });"
+              ], "type": "text/javascript"}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Idempotency-Key", "value": "{{idempotencyKey}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"seatIds\": {{seatIds}},\n  \"ttlSeconds\": 30\n}"},
+            "url": {"raw": "{{baseUrl}}/reservations", "host": ["{{baseUrl}}"], "path": ["reservations"]}
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Payment (first resv)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {"exec": [
+                "const json = pm.response.json();",
+                "pm.collectionVariables.set('saleId', json.saleId);",
+                "pm.test('Payment confirmed has saleId', function () { pm.expect(json.saleId).to.exist; });"
+              ], "type": "text/javascript"}
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"userId\": \"{{userId}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/reservations/{{firstReservationId}}/confirm-payment", "host": ["{{baseUrl}}"], "path": ["reservations", "{{firstReservationId}}", "confirm-payment"]}
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Purchases",
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/users/{{userId}}/purchases", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "purchases"]}},
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {"exec": [
+        "// Set nowIso for Create Session",
+        "pm.variables.set('nowIso', new Date().toISOString());",
+        "// Derive firstReservationId from collection variable",
+        "const resv = pm.collectionVariables.get('reservationIds');",
+        "if (resv) { try { const arr = JSON.parse(resv); if (arr.length) pm.collectionVariables.set('firstReservationId', arr[0]); } catch(e) {} }"
+      ], "type": "text/javascript"}
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:3000"},
+    {"key": "userId", "value": "user-123"},
+    {"key": "idempotencyKey", "value": ""},
+    {"key": "sessionId", "value": ""},
+    {"key": "seatIds", "value": "[]"},
+    {"key": "reservationIds", "value": "[]"},
+    {"key": "firstReservationId", "value": ""},
+    {"key": "nowIso", "value": ""}
+  ]
+}

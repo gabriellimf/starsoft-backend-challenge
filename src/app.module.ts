@@ -13,6 +13,10 @@ import { KafkaModule } from './shared/kafka/kafka.module';
 import { LocksModule } from './shared/locks/locks.module';
 import { LoggingModule } from './shared/logging/logging.module';
 import { UsersModule } from './users/users.module';
+import { ElasticsearchModule } from './shared/elasticsearch/elasticsearch.module';
+import { EmailModule } from './shared/email/email.module';
+import { ConsumersModule } from './consumers/consumers.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -23,7 +27,11 @@ import { UsersModule } from './users/users.module';
     RedisCacheModule,
     KafkaModule,
     LocksModule,
-    UsersModule,
+  UsersModule,
+  ElasticsearchModule,
+  EmailModule,
+  ConsumersModule,
+    MetricsModule,
     SessionsModule,
     ReservationsModule,
   ],

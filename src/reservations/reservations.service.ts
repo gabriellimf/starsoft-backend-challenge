@@ -5,6 +5,7 @@ import { DataSource, In, MoreThan, Repository } from 'typeorm';
 import { Seat } from '../sessions/seat.entity';
 import { Session } from '../sessions/session.entity';
 import { KafkaService } from '../shared/kafka/kafka.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { LockService } from '../shared/locks/locks.service';
 
 import { Reservation, Sale } from './reservation.entity';
@@ -15,6 +16,7 @@ export class ReservationsService {
     private readonly dataSource: DataSource,
     private readonly locks: LockService,
     private readonly kafka: KafkaService,
+    private readonly metrics: MetricsService,
     @InjectRepository(Reservation) private readonly reservationsRepo: Repository<Reservation>,
     @InjectRepository(Sale) private readonly salesRepo: Repository<Sale>,
     @InjectRepository(Seat) private readonly seatsRepo: Repository<Seat>,
@@ -61,6 +63,7 @@ export class ReservationsService {
           seatIds,
           expiresAt,
         });
+        this.metrics.incrementReservationEvent('reservation.created');
         return { reservationIds: saved.map((r) => r.id), expiresAt };
       });
     });
@@ -94,6 +97,7 @@ export class ReservationsService {
         seatId: r.seatId,
         userId,
       });
+      this.metrics.incrementReservationEvent('payment.confirmed');
       return { saleId: sale.id };
     });
   }
@@ -112,6 +116,7 @@ export class ReservationsService {
         sessionId: r.sessionId,
         seatId: r.seatId,
       });
+      this.metrics.incrementReservationEvent('reservation.expired');
     }
     return toExpire.length;
   }

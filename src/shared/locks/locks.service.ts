@@ -27,7 +27,6 @@ export class LockService {
       try {
         await lock.release();
       } catch {
-        // ignore release errors
       }
     }
   }

@@ -9,9 +9,14 @@ import { Reservation, Sale } from './reservation.entity';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
 import { ExpirationProcessor } from './tasks/expiration.processor';
+import { MetricsModule } from '../metrics/metrics.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Reservation, Sale, Seat, Session]), ScheduleModule.forRoot()],
+  imports: [
+    TypeOrmModule.forFeature([Reservation, Sale, Seat, Session]),
+    ScheduleModule.forRoot(),
+    MetricsModule,
+  ],
   controllers: [ReservationsController],
   providers: [ReservationsService, ExpirationProcessor],
   exports: [ReservationsService],
