@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 
@@ -15,6 +15,9 @@ export class SessionsService {
   ) {}
 
   async createSession(dto: CreateSessionDto) {
+    if (dto.seatsCount < 16) {
+      throw new BadRequestException('seatsCount must be at least 16');
+    }
     return this.dataSource.transaction(async (manager) => {
       const session = manager.create(Session, {
         movieTitle: dto.movieTitle,

@@ -20,7 +20,7 @@ Pré-requisitos:
 - Docker e Docker Compose
 
 1. Ajuste as variáveis de ambiente, se necessário, no arquivo `.env` (opcional). Há um `.env.example` com defaults.
-2. Suba toda a stack:
+2. Suba toda a stack (agora com proxy Nginx na porta 3000):
 
 ```bash
 docker compose up --build -d
@@ -28,7 +28,7 @@ docker compose up --build -d
 
 Serviços expostos:
 
-- API: http://localhost:3000 (Swagger em http://localhost:3000/api-docs)
+- API (via proxy): http://localhost:3000 (Swagger em http://localhost:3000/api-docs)
 - Postgres: localhost:5432
 - Redis: localhost:6379
 - Kafka: localhost:3002
@@ -43,10 +43,11 @@ Para desenvolvimento local sem Docker, instale dependências e rode a API:
 ```bash
 npm install
 npm run start:dev
+```
 
 ### Migrations (Banco de Dados)
 
-O schema é gerenciado por migrations (sem `synchronize`). As migrations rodam automaticamente no startup da aplicação, mas você também pode executar manualmente:
+O schema é gerenciado por migrations (sem `synchronize`). As migrations rodam automaticamente no startup da aplicação, mas você também pode executar manualmente (scripts atualizados para `ts-node`):
 
 ```bash
 # Executar migrations
@@ -67,11 +68,37 @@ Observação: configure `DATABASE_URL` no ambiente ou `.env`.
   - Verifique se o container `cinemaapi` está saudável: `docker compose ps`.
   - Abra os logs: `docker compose logs -f api` e confira a mensagem de startup.
   - Confirme se a porta 3000 está livre e mapeada: `localhost:3000`.
+
+### Troubleshooting: API não inicia / Swagger inacessível
+
+Sintomas:
+- Outros serviços (Prometheus, Kafka UI, Grafana, Kibana) sobem, mas a API fica em `health: starting` e `http://localhost:3000/api-docs` não abre.
+- Logs do container `api` mostram erro de migration, por exemplo: `column "seatid" does not exist` em `InitialSchema1670000000000`.
+
+Causa provável:
+- Conflito entre uma migration legada e a migration atual.
+
+Como resolver:
+- Remova a migration antiga `src/shared/database/migrations/1670000000000-initial-schema.ts` (já foi removida neste repo) e mantenha apenas a `20260201120000-init-schema.ts`.
+- Rebuild sem cache e suba novamente os serviços.
+- Se o banco já tem schema inconsistente, opcionalmente derrube com volumes e suba de novo.
+
+Comandos (opcionais):
+
+```bash
+# rebuild sem cache
+docker compose build --no-cache api
+
+# subir toda a stack
+docker compose up -d
+
+# (opcional) resetar volumes do Postgres
+docker compose down -v && docker compose up -d
 ```
 
 ## Visão geral da solução
 
-- Concorrência: ao reservar assentos, aplicamos locks distribuídos via Redlock (Redis) por assento (`lock:session:{sessionId}:seat:{seatId}`) e transação no banco para garantir consistência. As chaves são ordenadas antes da aquisição para prevenir deadlock.
+- Concorrência: ao reservar assentos, aplicamos locks distribuídos via Redlock (Redis) por assento (`lock:session:{sessionId}:seat:{seatId}`) e transação no banco para garantir consistência. As chaves são ordenadas antes da aquisição para prevenir deadlock. O número mínimo de assentos por sessão é validado (>= 16) tanto no DTO quanto no service.
 - Idempotência: endpoints críticos de escrita (POST /reservations, POST /reservations/:id/confirm-payment) aceitam header `Idempotency-Key`. Um interceptor armazena a resposta no Redis por alguns minutos e devolve a mesma resposta em replays seguros.
 - Expiração: um job (cron) verifica periodicamente reservas pendentes com `expiresAt` ultrapassado, marca como `EXPIRED` e publica evento `reservation.expired`, além de `seat.released` explicitamente.
 - Eventos: ao criar reserva e confirmar pagamento, publicamos eventos (`reservation.created`, `payment.confirmed`). Em expiração, publicamos `reservation.expired` e `seat.released`. Em mock mode (`KAFKA_MOCK_MODE=true`) a conexão é ignorada.
@@ -182,7 +209,6 @@ Importe a collection no Postman e siga as requisições numeradas.
 Configuração por env:
 
 ```env
-RATE_LIMIT_ENABLED=true
 RATE_LIMIT_TTL_SECONDS=60
 RATE_LIMIT_MAX_REQUESTS=100
 ```
@@ -243,7 +269,7 @@ curl -s -X POST http://localhost:3000/reservations/{reservationId}/confirm-payme
 
 ### Multi-instância (escala horizontal)
 
-Para validar coordenação entre réplicas:
+Para validar coordenação entre réplicas (proxy Nginx na frente da API):
 
 ```bash
 # subir com duas réplicas
@@ -263,3 +289,10 @@ Como garantimos consistência:
 ---
 
 Qualidade > Quantidade: o foco está no núcleo seguro (reserva/sell única, idempotência, expiração), observabilidade e documentação de operação.
+
+## Notas recentes de implementação
+
+- Mínimo de assentos por sessão: agora validado com `@Min(16)` no `CreateSessionDto` e reforçado no `SessionsService` (erro 400 se `seatsCount < 16`).
+- Escala horizontal: adicionado serviço `proxy` (Nginx) em `docker-compose.yml` com `proxy/nginx.conf`, permitindo `docker compose up -d --scale api=2` sem conflito de porta/nome de container. A API interna expõe a porta 3000 apenas na rede de containers.
+- Scripts de migrations: atualizados para usar `ts-node` (`typeorm:run` e `typeorm:revert`).
+- `init-db.sql`: pasta agora montada em `/docker-entrypoint-initdb.d` do Postgres para inicialização opcional; as migrations continuam sendo executadas automaticamente no startup.

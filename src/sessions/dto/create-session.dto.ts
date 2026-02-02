@@ -22,6 +22,6 @@ export class CreateSessionDto {
 
   @ApiProperty({ example: 16, minimum: 1 })
   @IsInt()
-  @Min(1)
+  @Min(16)
   seatsCount!: number;
 }
