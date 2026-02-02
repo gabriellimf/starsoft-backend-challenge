@@ -1,205 +1,207 @@
-# Teste para Desenvolvedor(a) Back-End Node.js/NestJS - Sistemas Distribuídos
+# Cinema API — NestJS, PostgreSQL, Kafka, Redis
 
-## Introdução
+Back-end para venda de ingressos em rede de cinemas, com foco em concorrência, idempotência e expiração de reservas. Construído em NestJS seguindo boas práticas (SOLID, separação de camadas, validação, logging), com PostgreSQL (TypeORM), Kafka (kafkajs) para eventos e Redis para cache e locks distribuídos.
 
-Bem-vindo(a) ao processo seletivo para a posição de **Desenvolvedor(a) Back-End** em nossa equipe! Este teste tem como objetivo avaliar suas habilidades técnicas em sistemas distribuídos, alta concorrência, e arquiteturas escaláveis utilizando Node.js e NestJS.
+## Visão Geral
 
-## Instruções
+O sistema garante que nenhum assento seja vendido duas vezes usando:
+- Locks distribuídos via Redlock (Redis) por assento
+- Transações no Postgres e checagens de consistência
+- Idempotência nos endpoints críticos (com `Idempotency-Key`)
+- Expiração automática de reservas (cron) e liberação do assento
+- Publicação/consumo de eventos com retry e DLQ mínimo
 
-- Faça um **fork** deste repositório para o seu GitHub pessoal.
-- Desenvolva as soluções solicitadas abaixo, seguindo as **melhores práticas de desenvolvimento**.
-- Após a conclusão, envie o link do seu repositório para avaliação.
-- Sinta-se à vontade para adicionar qualquer documentação ou comentários que julgar necessário.
+## Tecnologias Escolhidas
 
-## Desafio
+- Node.js 20 + NestJS 11
+- TypeORM + PostgreSQL
+- Kafka (kafkajs) + Zookeeper
+- Redis (cache + Redlock)
+- Swagger (OpenAPI) em `/api-docs`
+- Prometheus (`/metrics`) + Grafana (dashboards provisionados)
+- Elasticsearch + Kibana (indexação de eventos)
+- ESLint + Prettier + Jest
 
-### Contexto
+## Como Executar
 
-Você foi designado para desenvolver o sistema de venda de ingressos para uma **rede de cinemas**. O sistema precisa lidar com **concorrência**: múltiplos usuários tentando comprar os mesmos assentos simultaneamente.
+Pré-requisitos:
+- Docker e Docker Compose
 
-### O Problema Real
+1) Subir a stack completa com Docker:
 
-Imagine a seguinte situação:
-
-- Uma sala de cinema com **2 assentos disponíveis**
-- **10 usuários** tentando comprar no mesmo momento
-- **Múltiplas instâncias** da aplicação rodando simultaneamente
-- Necessidade de garantir que **nenhum assento seja vendido duas vezes**
-- **Reservas temporárias** enquanto o pagamento é processado (30 segundos)
-- **Cancelamento automático** se o pagamento não for confirmado
-
-### Requisitos Obrigatórios
-
-#### 1. **Configuração do Ambiente**
-
-Configure um ambiente de desenvolvimento utilizando **Docker** e **Docker Compose**, incluindo:
-
-- Aplicação Node.js com **NestJS**
-- **Banco de dados relacional** (PostgreSQL, MySQL, etc.)
-- **Sistema de mensageria** (Kafka, RabbitMQ, etc.)
-- **Banco de dados distribuído** para cache (Redis, Memcached, etc.)
-- A aplicação deve ser iniciada com um único comando (`docker-compose up`)
-
-#### 2. **API RESTful - Gestão de Ingressos**
-
-Implemente uma API RESTful com as seguintes operações:
-
-**2.1. Gestão de Sessões**
-
-- Criar sessões de cinema (filme, horário, sala)
-- Definir assentos disponíveis por sessão (Mínimo 16 assentos)
-- Definir preço do ingresso
-
-**2.2. Reserva de Assentos**
-
-- Endpoint para reservar assento(s)
-- Reserva tem validade de 30 segundos
-- Retornar ID da reserva e timestamp de expiração
-
-**2.3. Confirmação de Pagamento**
-
-- Endpoint para confirmar pagamento de uma reserva, e assim converter reserva em venda definitiva
-- Publicar evento de venda confirmada
-
-**2.4. Consultas**
-
-- Buscar disponibilidade de assentos por sessão (tempo real)
-- Histórico de compras por usuário
-
-#### 3. **Processamento Assíncrono com Mensageria**
-
-- Usar **sistema de mensageria** para comunicação assíncrona entre componentes
-- Publicar eventos quando: reserva criada, pagamento confirmado, reserva expirada, assento liberado
-- Consumir e processar esses eventos de forma confiável
-
-#### 4. **Logging**
-
-- Implementar logging estruturado (níveis: DEBUG, INFO, WARN, ERROR)
-
-#### 5. **Clean Code e Boas Práticas**
-
-- Aplicar princípios SOLID
-- Separação clara de responsabilidades (Controllers, Services, Repositories/Use Cases)
-- Tratamento adequado de erros
-- Configurar ESLint e Prettier
-- Commits organizados e descritivos
-
-### Requisitos Técnicos Específicos
-
-#### Estrutura de Banco de Dados Sugerida
-
-Você deve projetar um schema que suporte:
-
-- **Sessões**: informações da sessão (filme, horário, sala)
-- **Assentos**: assentos disponíveis por sessão
-- **Reservas**: reservas temporárias com expiração
-- **Vendas**: vendas confirmadas
-
-#### Fluxo de Reserva Esperado
-
-```
-1. Cliente solicita uma reserva
-2. Sistema verifica disponibilidade com proteção contra concorrência
-3. Cria reserva temporária (válida por 30 segundos)
-4. Publica evento no sistema de mensageria
-5. Retorna ID da reserva
-
-6. Cliente confirma o pagamento
-7. Sistema valida reserva (ainda não expirou?)
-8. Converte reserva em venda definitiva
-9. Publica evento de confirmação no sistema de mensageria
+```bash
+docker compose up -d --build
 ```
 
-#### Edge Cases a Considerar
+Serviços expostos:
+- API (via proxy): http://localhost:3000 (Swagger em http://localhost:3000/api-docs)
+- Postgres: localhost:5432
+- Redis: localhost:6379
+- Kafka: localhost:3002
+- Kafka UI: http://localhost:8080
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3001
+- Elasticsearch (HTTP): http://localhost:3003
+- Kibana: http://localhost:5601
 
-1. **Race Condition**: 2 usuários clicam no último assento disponível no mesmo milissegundo
-2. **Deadlock**: Usuário A reserva assentos 1 e 3, Usuário B reserva assentos 3 e 1, ambos tentam reservar o assento do outro
-3. **Idempotência**: Cliente reenvia mesma requisição por timeout
-4. **Expiração**: Reservas não confirmadas devem liberar o assento automaticamente após 30 segundos
+Para desenvolvimento local sem Docker:
 
-### Diferenciais (Opcional - Pontos Extra)
-
-Os itens abaixo são opcionais e darão pontos extras na avaliação:
-
-- **Documentação da API**: Swagger/OpenAPI acessível em `/api-docs`
-- **Testes de Unidade**: Cobertura de 60-70%, mockar dependências externas
-- **Dead Letter Queue (DLQ)**: Mensagens que falharam vão para fila separada
-- **Retry Inteligente**: Sistema de retry com backoff exponencial
-- **Processamento em Batch**: Processar mensagens em lotes
-- **Testes de Integração/Concorrência**: Simular múltiplos usuários simultaneamente
-- **Rate Limiting**: Limitar requisições por IP/usuário
-
-### Critérios de Avaliação
-
-Os seguintes aspectos serão considerados (em ordem de importância):
-
-1. **Funcionalidade Correta**: O sistema garante que nenhum assento é vendido duas vezes?
-2. **Controle de Concorrência**: Coordenação distribuída implementada corretamente?
-3. **Qualidade de Código**: Clean code, SOLID, padrões de projeto?
-4. **Documentação**: README claro e código bem estruturado?
-
-### Entrega
-
-#### Repositório Git
-
-- Código disponível em repositório público (GitHub/GitLab)
-- Histórico de commits bem organizado e descritivo
-- Branch `main` deve ser a versão final
-
-#### README.md Obrigatório
-
-Deve conter:
-
-1. **Visão Geral**: Breve descrição da solução
-2. **Tecnologias Escolhidas**: Qual banco de dados, sistema de mensageria e cache você escolheu e por quê?
-3. **Como Executar**:
-   - Pré-requisitos
-   - Comandos para subir o ambiente
-   - Como popular dados iniciais
-   - Como executar testes (se houver)
-4. **Estratégias Implementadas**:
-   - Como você resolveu race conditions?
-   - Como garantiu coordenação entre múltiplas instâncias?
-   - Como preveniu deadlocks?
-5. **Endpoints da API**: Lista com exemplos de uso
-6. **Decisões Técnicas**: Justifique escolhas importantes de design
-7. **Limitações Conhecidas**: O que ficou faltando? Por quê?
-8. **Melhorias Futuras**: O que você faria com mais tempo?
-
-### Exemplo de Fluxo para Testar
-
-Para facilitar a avaliação, inclua instruções ou script mostrando:
-
+```bash
+npm install
+npm run start:dev
 ```
+
+### Popular dados iniciais
+
+- As migrations rodam automaticamente no startup da aplicação.
+- O diretório `init-db.sql/` é montado em `/docker-entrypoint-initdb.d` do Postgres e pode conter seeds SQL opcionais.
+- Alternativa via API: use os comandos do tutorial abaixo para criar sessões e reservas.
+
+### Como executar testes
+
+- Testes:
+
+```bash
+npm test
+```
+
+- Cobertura:
+
+```bash
+npm run test:cov
+```
+
+- Watch mode:
+
+```bash
+npm run test:watch
+```
+
+## Tutorial rápido: iniciar e testar
+
+1) Abrir a documentação da API (Swagger)
+- URL: http://localhost:3000/api-docs
+- A raiz `/` redireciona automaticamente para o Swagger.
+
+2) Criar uma sessão e assentos
+
+```bash
+# Criar sessão "Filme X" com 16 assentos
+curl -s -X POST http://localhost:3000/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "movieTitle":"Filme X",
+    "startTime":"2026-01-30T19:00:00.000Z",
+    "room":"Sala 1",
+    "price":25.0,
+    "seatsCount":16
+  }'
+```
+
+Copie o `id` da sessão retornada.
+
+3) Ver disponibilidade de assentos
+
+```bash
+curl -s http://localhost:3000/sessions/{sessionId}/availability
+```
+
+4) Reservar um assento (com Idempotency-Key)
+
+```bash
+curl -s -X POST http://localhost:3000/reservations \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 11111111-1111-1111-1111-111111111111' \
+  -d '{
+    "userId":"u1",
+    "sessionId":"{sessionId}",
+    "seatIds":["{seatId}"],
+    "ttlSeconds":30
+  }'
+```
+
+Guarde o `reservationId` retornado.
+
+5) Confirmar pagamento da reserva
+
+```bash
+curl -s -X POST http://localhost:3000/reservations/{reservationId}/confirm-payment \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 22222222-2222-2222-2222-222222222222' \
+  -d '{"userId":"u1"}'
+```
+
+6) Consultar histórico de compras do usuário
+
+```bash
+curl -s http://localhost:3000/users/u1/purchases
+```
+
+7) Simular concorrência (opcional)
+
+```bash
+# Escalar múltiplas instâncias da API por trás do Nginx
+docker compose up -d --scale api=2
+
+# Disputar o mesmo assento com o script de carga
+bash scripts/load-test.sh {sessionId} {seatId}
+```
+
+8) Executar testes automatizados
+
+```bash
+npm test
+```
+
+## Endpoints da API (resumo)
+
+- Sessions
+  - POST `/sessions` — cria sessão com assentos
+  - GET `/sessions/{id}/availability` — disponibilidade em tempo real
+- Reservations
+  - POST `/reservations` — cria reserva de assentos (TTL default 30s)
+  - POST `/reservations/{id}/confirm-payment` — confirma pagamento e gera venda
+- Users
+  - GET `/users/{id}/purchases` — histórico de compras confirmadas
+- Observabilidade
+  - GET `/metrics` — métricas Prometheus
+  - GET `/health` — health básico; `/health/liveness`, `/health/readiness`
+- Docs
+  - GET `/api-docs` — Swagger UI
+
+## Estratégias Implementadas
+
+1. Race Conditions: evitadas combinando locks por assento (Redis/Redlock) e transações no Postgres; unique constraint de venda por assento reforça idempotência.
+2. Coordenação entre múltiplas instâncias: Nginx proxy na frente e Redlock para ordem global; idempotência baseada em Redis.
+3. Deadlock: chaves de lock são sempre ordenadas, garantindo ordem global na aquisição.
+4. Idempotência: interceptor baseado em Redis utilizando `Idempotency-Key` (cache de resposta 5 min; cabeçalho `Idempotency-Replay` nos replays).
+5. Expiração: cron (a cada 10s) expira reservas `PENDING` com `expiresAt < now` e emite `reservation.expired` e `seat.released`.
+
+## Decisões Técnicas
+
+- TypeORM com Postgres por maturidade e suporte a transações.
+- Redlock (Redis) para coordenação simples e eficaz.
+- Kafkajs para Kafka; modo mock para desenvolvimento.
+- Idempotência no interceptor (edge), desacoplada da regra de negócio.
+- Separação por camadas: controllers → services → repos (TypeORM), módulos compartilhados (db, cache, kafka, locks, logging, metrics).
+
+## Melhorias Futuras
+
+- Migrations completas e pipeline CI com lint/test.
+- Reprocessamento de DLQ com alertas.
+- Testes de carga/concorrência mais amplos.
+- Rate limiting por rota/tenant.
+
+## Exemplo de Fluxo para Testar
+
 1. Criar sessão "Filme X - 19:00"
 2. Criar sala com no mínimo 16 assentos, a R$ 25,00 cada
-3. Simular
- 3.1. 2 usuários tentando reservar o mesmo assento simultaneamente
+3. Simular: 2 usuários tentando reservar o mesmo assento simultaneamente
 4. Verificar quantidade de reservas geradas
 5. Comprovar o funcionamento do fluxo de pagamento do assento
-```
 
-### Prazo
+### Extras
 
-- **Prazo sugerido**: 5 dias corridos a partir do recebimento do desafio
-
-### Dúvidas e Suporte
-
-- Abra uma **Issue** neste repositório caso tenha dúvidas sobre requisitos
-- Não fornecemos suporte para problemas de configuração de ambiente
-- Assuma premissas razoáveis quando informações estiverem ambíguas e documente-as
-
----
-
-## Observações Finais
-
-Este é um desafio que reflete problemas reais enfrentados em produção. **Não esperamos que você implemente 100% dos requisitos**, especialmente os diferenciais. Priorize:
-
-1. ✅ Garantir que nenhum assento seja vendido duas vezes
-2. ✅ Sistema de mensageria confiável
-3. ✅ Código limpo e bem estruturado
-4. ✅ Documentação clara
-
-**Qualidade > Quantidade**. É melhor implementar poucas funcionalidades muito bem feitas do que muitas de forma superficial.
-
-**Boa sorte! Estamos ansiosos para conhecer sua solução e discutir suas decisões técnicas na entrevista.**
+- Collection Postman: `scripts/postman.collection.json`
+- Grafana: Dashboard provisionado "Cinema API Overview"
+- Kibana: criar index pattern `cinema-events` e filtrar por `type:reservation.created`, `payment.confirmed`, `reservation.expired`, `seat.released`
