@@ -14,7 +14,12 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const res = context.switchToHttp().getResponse<Response>();
     const method = (req.method || 'GET').toUpperCase();
     const path = req.originalUrl || req.url || '';
-    const key = req.get('Idempotency-Key') || undefined;
+    const headerMap = (req.headers || {}) as Record<string, string | string[]>;
+    const rawKey =
+      (typeof (req as any).get === 'function'
+        ? (req as any).get('Idempotency-Key')
+        : headerMap['idempotency-key'] || headerMap['Idempotency-Key']) || undefined;
+    const key = Array.isArray(rawKey) ? rawKey[0] : rawKey;
 
     if (!key || method !== 'POST') {
       return next.handle();

@@ -59,7 +59,6 @@ async function bootstrap() {
     customSiteTitle: 'Cinema API Docs',
   });
 
-  // Convenience: redirect root to Swagger UI
   const expressApp = app.getHttpAdapter().getInstance() as Application;
   expressApp.get('/', (_req: Request, res: Response) => res.redirect('/api-docs'));
 

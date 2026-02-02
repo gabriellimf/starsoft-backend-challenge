@@ -69,6 +69,11 @@ describe('KafkaService behavior (non-mock, stubbed)', () => {
     await expect(
       runHandler({ topic: 'topic-2', message: { value: Buffer.from('{}') } }),
     ).rejects.toBeDefined();
+    const dlq = sent.find((s) => s.topic === 'cinema-dlq');
+    expect(dlq).toBeDefined();
+    const payload = JSON.parse(dlq.messages[0].value.toString());
+    expect(payload.originalTopic).toBe('topic-2');
+    expect(payload.reason).toBe('boom');
 
     await svc.onModuleDestroy();
 

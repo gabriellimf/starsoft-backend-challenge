@@ -14,6 +14,7 @@ export default () => ({
       .filter(Boolean),
     CLIENT_ID: process.env['KAFKA_CLIENT_ID'] || 'cinema-api',
     MOCK: (process.env['KAFKA_MOCK_MODE'] || 'false') === 'true',
+    DLQ_TOPIC: process.env['KAFKA_DLQ_TOPIC'] || 'cinema-dlq',
   },
   REDIS_URL: process.env['REDIS_URL'] || 'redis://localhost:6379',
   RATE_LIMIT_ENABLED: (process.env['RATE_LIMIT_ENABLED'] || 'true') === 'true',

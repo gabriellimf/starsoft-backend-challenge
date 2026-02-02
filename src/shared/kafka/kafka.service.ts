@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Kafka, logLevel, Producer, Consumer } from 'kafkajs';
 
-type KafkaConfig = { clientId: string; brokers: string[]; mock?: boolean };
+type KafkaConfig = { clientId: string; brokers: string[]; mock?: boolean; dlqTopic?: string };
 
 @Injectable()
 export class KafkaService implements OnModuleInit, OnModuleDestroy {
@@ -60,6 +60,25 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.error(`Error handling message on topic ${topic}: ${msg}`);
+
+          try {
+            await this.producer?.send({
+              topic: this.cfg.dlqTopic || 'cinema-dlq',
+              messages: [
+                {
+                  value: JSON.stringify({
+                    originalTopic: topic,
+                    reason: msg,
+                    payload,
+                    failedAt: new Date().toISOString(),
+                  }),
+                },
+              ],
+            });
+          } catch (dlqErr: unknown) {
+            const dmsg = dlqErr instanceof Error ? dlqErr.message : String(dlqErr);
+            this.logger.error(`Failed to push to DLQ: ${dmsg}`);
+          }
           throw err;
         }
       },
