@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+
 const Redlock = require('redlock').default;
 
 import type Redis from 'ioredis';
@@ -26,8 +26,7 @@ export class LockService {
     } finally {
       try {
         await lock.release();
-      } catch {
-      }
+      } catch {}
     }
   }
 }

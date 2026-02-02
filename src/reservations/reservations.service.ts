@@ -116,6 +116,12 @@ export class ReservationsService {
         sessionId: r.sessionId,
         seatId: r.seatId,
       });
+      await this.kafka.publish('seat.released', {
+        sessionId: r.sessionId,
+        seatId: r.seatId,
+        reservationId: r.id,
+        reason: 'expired',
+      });
       this.metrics.incrementReservationEvent('reservation.expired');
     }
     return toExpire.length;

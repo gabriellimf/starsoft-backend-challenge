@@ -19,8 +19,6 @@ export class EmailService {
     if (!this.resend) return;
     try {
       await this.resend.emails.send({ from: this.from!, to, subject, html });
-    } catch {
-      
-    }
+    } catch {}
   }
 }

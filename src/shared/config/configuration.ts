@@ -16,4 +16,7 @@ export default () => ({
     MOCK: (process.env['KAFKA_MOCK_MODE'] || 'false') === 'true',
   },
   REDIS_URL: process.env['REDIS_URL'] || 'redis://localhost:6379',
+  RATE_LIMIT_ENABLED: (process.env['RATE_LIMIT_ENABLED'] || 'true') === 'true',
+  RATE_LIMIT_TTL_SECONDS: parseInt(process.env['RATE_LIMIT_TTL_SECONDS'] || '60', 10),
+  RATE_LIMIT_MAX_REQUESTS: parseInt(process.env['RATE_LIMIT_MAX_REQUESTS'] || '100', 10),
 });

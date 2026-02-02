@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 
 @Module({
   imports: [
@@ -9,16 +9,21 @@ import { TypeOrmModule } from '@nestjs/typeorm';
       useFactory: (config: ConfigService) => {
         const url = config.get<string>('DATABASE_URL');
         const ssl = config.get<boolean>('DB_SSL');
-        const synchronize = config.get<boolean>('DB_SYNCHRONIZE');
+        const env = config.get<string>('NODE_ENV') || 'development';
+        const synchronizeFromEnv = config.get<boolean>('DB_SYNCHRONIZE');
+        const synchronize = env === 'development' ? !!synchronizeFromEnv : false;
         const logging = config.get<boolean>('DB_LOGGING');
-        return {
+        const options: TypeOrmModuleOptions = {
           type: 'postgres',
           url,
           ssl: ssl ? { rejectUnauthorized: false } : false,
           autoLoadEntities: true,
           synchronize,
+          migrationsRun: true,
+          migrations: [__dirname + '/migrations/*.{ts,js}'],
           logging,
-        } as any;
+        };
+        return options;
       },
     }),
   ],

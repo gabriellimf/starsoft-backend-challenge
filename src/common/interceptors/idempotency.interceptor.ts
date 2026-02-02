@@ -1,4 +1,5 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { Observable, from } from 'rxjs';
 import { tap, switchMap } from 'rxjs/operators';
 
@@ -8,12 +9,12 @@ import { CacheService } from '../../shared/cache/cache.service';
 export class IdempotencyInterceptor implements NestInterceptor {
   constructor(private readonly cache: CacheService) {}
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<Request & { userId?: string }>();
-    const res = context.switchToHttp().getResponse();
+    const res = context.switchToHttp().getResponse<Response>();
     const method = (req.method || 'GET').toUpperCase();
-    const path = (req as any).originalUrl || (req as any).url || '';
-    const key = (req.headers as any)['idempotency-key'] as string | undefined;
+    const path = req.originalUrl || req.url || '';
+    const key = req.get('Idempotency-Key') || undefined;
 
     if (!key || method !== 'POST') {
       return next.handle();
@@ -21,7 +22,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
     const cacheKey = `idem:${key}:${method}:${path}`;
 
-    return from(this.cache.get<any>(cacheKey)).pipe(
+    return from(this.cache.get<unknown>(cacheKey)).pipe(
       switchMap((cached) => {
         if (cached) {
           res.setHeader('Idempotency-Replay', 'true');
@@ -30,8 +31,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
         const startedAt = Date.now();
         return next.handle().pipe(
-          tap(async (data) => {
-            await this.cache.set(cacheKey, data, 5 * 60);
+          tap((data) => {
+            void this.cache.set(cacheKey, data, 5 * 60);
             res.setHeader('Idempotency-Stored-In', `${Date.now() - startedAt}ms`);
           }),
         );

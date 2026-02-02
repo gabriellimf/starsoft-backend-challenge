@@ -8,6 +8,7 @@ export class MetricsService {
   private readonly requestCounter: Counter<string>;
   private readonly requestDuration: Histogram<string>;
   private readonly reservationEvents: Counter<string>;
+  private readonly dlqMessages: Counter<string>;
 
   constructor() {
     this.registry = register;
@@ -34,18 +35,36 @@ export class MetricsService {
       labelNames: ['event_type'],
       registers: [this.registry],
     });
+
+    this.dlqMessages = new Counter({
+      name: 'dlq_messages_total',
+      help: 'Count of messages forwarded to DLQ',
+      labelNames: ['original_topic', 'reason'],
+      registers: [this.registry],
+    });
   }
 
   incrementRequest(method: string, path: string, statusCode: number) {
     this.requestCounter.labels(method, path, String(statusCode)).inc();
   }
 
-  observeRequestDuration(method: string, path: string, statusCode: number, durationSeconds: number) {
+  observeRequestDuration(
+    method: string,
+    path: string,
+    statusCode: number,
+    durationSeconds: number,
+  ) {
     this.requestDuration.labels(method, path, String(statusCode)).observe(durationSeconds);
   }
 
-  incrementReservationEvent(eventType: 'reservation.created' | 'reservation.expired' | 'payment.confirmed') {
+  incrementReservationEvent(
+    eventType: 'reservation.created' | 'reservation.expired' | 'payment.confirmed',
+  ) {
     this.reservationEvents.labels(eventType).inc();
+  }
+
+  incrementDlq(originalTopic: string, reason: string) {
+    this.dlqMessages.labels(originalTopic, reason).inc();
   }
 
   async getMetrics(): Promise<string> {

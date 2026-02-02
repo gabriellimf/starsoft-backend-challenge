@@ -1,16 +1,18 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 
 import type Redis from 'ioredis';
 
 @Injectable()
 export class CacheService implements OnModuleDestroy {
+  private readonly logger = new Logger(CacheService.name);
   constructor(@Inject('REDIS') private readonly redis: Redis) {}
 
   async onModuleDestroy() {
     try {
       await this.redis.quit();
-    } catch {
-      // ignore
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.debug(`Error quitting Redis client: ${msg}`);
     }
   }
 

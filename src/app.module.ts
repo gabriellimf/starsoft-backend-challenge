@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { ReservationsModule } from './reservations/reservations.module';
@@ -17,21 +18,30 @@ import { ElasticsearchModule } from './shared/elasticsearch/elasticsearch.module
 import { EmailModule } from './shared/email/email.module';
 import { ConsumersModule } from './consumers/consumers.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { RateLimitGuard } from './common/guards/rate-limit.guard';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: Number(process.env['RATE_LIMIT_TTL_SECONDS'] || 60),
+        limit: Number(process.env['RATE_LIMIT_MAX_REQUESTS'] || 100),
+      },
+    ]),
     LoggingModule,
     DatabaseModule,
     TypeOrmModule.forFeature([]),
     RedisCacheModule,
     KafkaModule,
     LocksModule,
-  UsersModule,
-  ElasticsearchModule,
-  EmailModule,
-  ConsumersModule,
+    UsersModule,
+    ElasticsearchModule,
+    EmailModule,
+    ConsumersModule,
     MetricsModule,
+    HealthModule,
     SessionsModule,
     ReservationsModule,
   ],
@@ -39,6 +49,10 @@ import { MetricsModule } from './metrics/metrics.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: IdempotencyInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
     },
   ],
 })

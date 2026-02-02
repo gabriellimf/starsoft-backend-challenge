@@ -10,7 +10,15 @@ const config: Config = {
   },
   collectCoverageFrom: ['src/**/*.(t|j)s'],
   coverageDirectory: 'coverage',
-  testRegex: '.*\\.spec\\.ts$'
+  testRegex: '.*\\.spec\\.ts$',
+  coverageThreshold: {
+    global: {
+      statements: 80,
+      lines: 80,
+      branches: 80,
+      functions: 80,
+    },
+  },
 };
 
 export default config;
